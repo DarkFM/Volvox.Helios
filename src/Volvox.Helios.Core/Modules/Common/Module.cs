@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Linq;
 using System.Threading.Tasks;
 using Discord.WebSocket;
-using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Volvox.Helios.Core.Utilities;
@@ -40,6 +38,13 @@ namespace Volvox.Helios.Core.Modules.Common
             else
                 Logger.LogError($"Module cannot be found in the metadata! Name: {moduleName}");
         }
+
+        /// <summary>
+        ///     Returns true if the module is enabled for the specified guild and false if not.
+        /// </summary>
+        /// <param name="guildId">Id if the guild to check.</param>
+        /// <returns>True if the module is enabled for the specified guild and false if not.</returns>
+        public abstract Task<bool> IsEnabledForGuild(ulong guildId);
 
         /// <summary>
         ///     Initialize the module.

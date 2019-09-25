@@ -5,11 +5,11 @@ using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Volvox.Helios.Core.Modules.Command.Framework;
 using Volvox.Helios.Core.Modules.Common;
-using Volvox.Helios.Core.Modules.DiscordFacing.Framework;
 using Volvox.Helios.Core.Utilities;
 
-namespace Volvox.Helios.Core.Modules.DiscordFacing
+namespace Volvox.Helios.Core.Modules.Command
 {
     /// <summary>
     ///     Manager for Discord message commands.
@@ -32,6 +32,16 @@ namespace Volvox.Helios.Core.Modules.DiscordFacing
         private DiscordSocketClient Client { get; set; }
 
         private IList<ICommand> Modules { get; }
+
+        /// <summary>
+        ///     Returns true if the module is enabled for the specified guild and false if not.
+        /// </summary>
+        /// <param name="guildId">Id if the guild to check.</param>
+        /// <returns>True if the module is enabled for the specified guild and false if not.</returns>
+        public override Task<bool> IsEnabledForGuild(ulong guildId)
+        {
+            return Task.FromResult(true);
+        }
 
         /// <summary>
         ///     Initialize the manager by binding to the MessageReceived event.
@@ -70,7 +80,7 @@ namespace Volvox.Helios.Core.Modules.DiscordFacing
                     Logger.LogError($"Command Manager: Error occurred {e.Message}");
 
                     var embed = new EmbedBuilder()
-                        .WithColor(new Color(255, 0, 0))
+                        .WithColor(EmbedColors.ErrorColor)
                         .WithTitle("Well, this is embarrassing...")
                         .WithDescription(
                             $"Something went ***very*** wrong trying to run that command. \n```\n{e.Message}\n```")

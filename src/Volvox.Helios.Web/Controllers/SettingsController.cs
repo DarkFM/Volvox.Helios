@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Volvox.Helios.Core.Bot;
 using Volvox.Helios.Core.Modules.Common;
@@ -12,12 +11,10 @@ using Volvox.Helios.Core.Utilities;
 using Volvox.Helios.Domain.Module;
 using Volvox.Helios.Domain.ModuleSettings;
 using Volvox.Helios.Service.Discord.Guild;
-using Volvox.Helios.Service.Discord.User;
 using Volvox.Helios.Service.EntityService;
 using Volvox.Helios.Service.Extensions;
 using Volvox.Helios.Service.ModuleSettings;
 using Volvox.Helios.Web.Filters;
-using Volvox.Helios.Web.Models;
 using Volvox.Helios.Web.ViewModels.Settings;
 
 namespace Volvox.Helios.Web.Controllers
@@ -27,20 +24,40 @@ namespace Volvox.Helios.Web.Controllers
     [IsUserGuildAdminFilter]
     public class SettingsController : Controller
     {
-        private readonly IModuleSettingsService<StreamAnnouncerSettings> _streamAnnouncerSettingsService;
-        private readonly IModuleSettingsService<StreamerRoleSettings> _streamerRoleSettingsService;
-        private readonly IEntityService<StreamAnnouncerChannelSettings> _streamAnnouncerChannelSettingsService;
+        private readonly IModuleSettingsService<ChatTrackerSettings> _chatTrackerSettingsService;
+        private readonly IModuleSettingsService<DadModuleSettings> _dadSettingsService;
+        private readonly IEntityService<RecurringReminderMessage> _recurringReminderService;
+        private readonly IModuleSettingsService<RemembotSettings> _reminderSettingsService;
+        private readonly IEntityService<StreamerChannelSettings> _streamAnnouncerChannelSettingsService;
+        private readonly IModuleSettingsService<StreamerSettings> _streamAnnouncerSettingsService;
+        private readonly IEntityService<WhiteListedRole> _whiteListedRoleEntityService;
+        private readonly IModuleSettingsService<CleanChatSettings> _cleanchatSettingsService;
+        private readonly IEntityService<CleanChatChannel> _cleanChatChannelEntityService;
 
-        public SettingsController(IModuleSettingsService<StreamAnnouncerSettings> streamAnnouncerSettingsService,
-            IModuleSettingsService<StreamerRoleSettings> streamerRoleSettingsService, IEntityService<StreamAnnouncerChannelSettings> streamAnnouncerChannelSettingsService)
-        {    
+        public SettingsController(IModuleSettingsService<StreamerSettings> streamAnnouncerSettingsService,
+            IEntityService<StreamerChannelSettings> streamAnnouncerChannelSettingsService,
+            IModuleSettingsService<ChatTrackerSettings> chatTrackerSettingsService,
+            IModuleSettingsService<RemembotSettings> reminderSettingsService,
+            IEntityService<RecurringReminderMessage> recurringReminderService,
+            IModuleSettingsService<DadModuleSettings> dadSettingsService,
+            IEntityService<WhiteListedRole> whiteListedRoleEntityService,
+            IModuleSettingsService<CleanChatSettings> cleanchatSettingsService,
+            IEntityService<CleanChatChannel> cleanChatEntityService)
+        {
             _streamAnnouncerSettingsService = streamAnnouncerSettingsService;
-            _streamerRoleSettingsService = streamerRoleSettingsService;
             _streamAnnouncerChannelSettingsService = streamAnnouncerChannelSettingsService;
+            _chatTrackerSettingsService = chatTrackerSettingsService;
+            _reminderSettingsService = reminderSettingsService;
+            _recurringReminderService = recurringReminderService;
+            _dadSettingsService = dadSettingsService;
+            _whiteListedRoleEntityService = whiteListedRoleEntityService;
+            _cleanchatSettingsService = cleanchatSettingsService;
+            _cleanChatChannelEntityService = cleanChatEntityService;
         }
 
-        public IActionResult Index(ulong guildId, [FromServices] IBot bot,
-            [FromServices] IDiscordSettings discordSettings, [FromServices] IList<IModule> modules)
+        public async Task<IActionResult> Index(ulong guildId, [FromServices] IBot bot,
+            [FromServices] IDiscordSettings discordSettings, [FromServices] IList<IModule> modules,
+            [FromServices] IEntityService<Poll> pollService)
         {
             if (bot.IsBotInGuild(guildId))
             {
@@ -48,7 +65,8 @@ namespace Volvox.Helios.Web.Controllers
                 {
                     GuildId = guildId,
                     GuildName = bot.GetGuilds().FirstOrDefault(g => g.Id == guildId)?.Name,
-                    Modules = modules.Where(mod => mod.Configurable).ToList()
+                    Modules = modules.Where(mod => mod.Configurable).ToList(),
+                    PollCount = ( await pollService.Get(p => p.GuildId == guildId) ).Count
                 };
 
                 return View(viewModel);
@@ -58,40 +76,51 @@ namespace Volvox.Helios.Web.Controllers
             var redirectUrl = Uri.EscapeDataString($"{HttpContext.Request.Scheme}://{HttpContext.Request.Host}");
 
             return Redirect(
-                $"https://discordapp.com/api/oauth2/authorize?client_id={discordSettings.ClientId}&permissions=8&redirect_uri={redirectUrl}&scope=bot&guild_id={guildId}");
+                $"https://discordapp.com/api/oauth2/authorize?client_id={discordSettings.ClientId}&permissions=8&redirect_uri={redirectUrl}&scope=bot&guild_id={guildId}&response_type=code");
         }
 
-        #region StreamAnnouncer
+        #region Streamer
 
         // GET
-        [HttpGet("StreamAnnouncer")]
-        public async Task<IActionResult> StreamAnnouncerSettings(ulong guildId,
-            [FromServices] IDiscordGuildService guildService)
+        [HttpGet("Streamer")]
+        public async Task<IActionResult> StreamerSettings(ulong guildId,
+            [FromServices] IDiscordGuildService guildService,
+            [FromServices] IEntityService<StreamerChannelSettings> channelSettingsService)
         {
-            // All channels for guild.
+            // All channels in guild.
             var channels = await guildService.GetChannels(guildId);
 
-            // Text channels for guild.
+            // Text channels in guild.
             var textChannels = channels.Where(x => x.Type == 0).ToList();
 
-            var viewModel = new StreamAnnouncerSettingsViewModel
+            // Roles in guild.
+            var roles = await guildService.GetRoles(guildId);
+
+            var viewModel = new StreamerSettingsViewModel
             {
                 Channels = new SelectList(textChannels, "Id", "Name"),
-                ChannelSettings = new StreamAnnouncerChannelSettingsViewModel(),
-                GuildId = guildId.ToString()
+                ChannelSettings = new StreamerChannelSettingsViewModel(),
+                GuildId = guildId.ToString(),
+                Roles = new SelectList(roles.RemoveManaged(), "Id", "Name")
             };
 
             // Get general module settings for guild, from database.
-            var settings = await _streamAnnouncerSettingsService.GetSettingsByGuild(guildId, x => x.ChannelSettings);
+            var settings = await _streamAnnouncerSettingsService.GetSettingsByGuild(guildId, x => x.WhiteListedRoleIds);
 
             if (settings == null) return View(viewModel);
 
             viewModel.Enabled = settings.Enabled;
+            viewModel.StreamerRoleEnabled = settings.StreamerRoleEnabled;
+            viewModel.RoleId = settings.RoleId;
+            viewModel.WhiteListedRoleIds = settings.WhiteListedRoleIds?.Select(r => r.RoleId).ToList();
+
+            if (settings.ChannelSettings == null)
+                settings.ChannelSettings = await channelSettingsService.Get(c => c.GuildId == guildId);
 
             // Gets first text channel's settings to prepopulate view with.
-            var defaultChannel = settings.ChannelSettings.FirstOrDefault(x => x.ChannelId == textChannels[0].Id);
+            var defaultChannel = settings.ChannelSettings?.FirstOrDefault(x => x.ChannelId == textChannels[0].Id);
 
-            // No channels setting saved, return viewmodel as is.
+            // No channels setting saved, return view model as is.
             if (defaultChannel == null) return View(viewModel);
 
             viewModel.ChannelSettings.RemoveMessages = defaultChannel.RemoveMessage;
@@ -99,54 +128,122 @@ namespace Volvox.Helios.Web.Controllers
             // Channel settings only exist if the module is enabled.
             viewModel.ChannelSettings.Enabled = true;
 
+            viewModel.RoleId = settings.RoleId;
+            viewModel.Enabled = settings.Enabled;
+
             return View(viewModel);
         }
 
         // POST
-        [HttpPost("StreamAnnouncer")]
-        public async Task<IActionResult> StreamAnnouncerSettings(ulong guildId, StreamAnnouncerSettingsViewModel viewModel)
-        {         
-            var settings = await _streamAnnouncerChannelSettingsService.Find(viewModel.ChannelId);
+        [HttpPost("Streamer")]
+        public async Task<IActionResult> StreamerSettings(ulong guildId,
+            StreamerSettingsViewModel viewModel, [FromServices] IBot bot,
+            [FromServices] IDiscordGuildService guildService)
+        {
+            var botRolePosition = bot.GetBotRoleHierarchy(guildId);
+            var roles = await guildService.GetRoles(guildId);
 
-            // Remember if there were settings in db, as settings will be populated later if they aren't.
-            var isSettingsInDb = settings != null;
+            var selectedRolePosition = roles.FirstOrDefault(r => r.Id == viewModel.RoleId)?.Position;
+
+            // Discord bots cannot assign to roles that are higher then them in the hierarchy.
+            if (selectedRolePosition > botRolePosition)
+            {
+                ModelState.AddModelError("RolePosition",
+                    "The bots managed role must be positioned higher than the selected role");
+
+                // All channels in guild.
+                var channels = await guildService.GetChannels(guildId);
+
+                // Text channels in guild.
+                var textChannels = channels.Where(x => x.Type == 0).ToList();
+
+                viewModel.Channels = new SelectList(textChannels, "Id", "Name");
+                viewModel.Roles = new SelectList(roles.RemoveManaged(), "Id", "Name");
+
+                return View(viewModel);
+            }
+
+            var moduleSettings = await _streamAnnouncerSettingsService.GetSettingsByGuild(guildId);
 
             var saveSettingsTasks = new List<Task>();
 
-            // Save general module settings to the database
-            saveSettingsTasks.Add(_streamAnnouncerSettingsService.SaveSettings(new StreamAnnouncerSettings
+            // If the guild doesn't already have a settings DB entry, we want to add one before we do anything else.
+            // Running that operation along side adding individual channel settings risks throwing an FK exception.
+            if (moduleSettings == null)
             {
-                GuildId = guildId,
-                Enabled = viewModel.Enabled,
-            }));
-
-            if (!isSettingsInDb)
-            {
-                settings = new StreamAnnouncerChannelSettings()
+                var streamerSettings = new StreamerSettings
                 {
                     GuildId = guildId,
-                    ChannelId = viewModel.ChannelId
+                    Enabled = viewModel.Enabled,
+                    StreamerRoleEnabled = viewModel.StreamerRoleEnabled,
+                    RoleId = viewModel.RoleId,
+                    WhiteListedRoleIds = new List<WhiteListedRole>()
                 };
-            }
 
-            settings.RemoveMessage = viewModel.ChannelSettings.RemoveMessages;
+                if (viewModel.WhiteListedRoleIds != null)
+                    streamerSettings.WhiteListedRoleIds = new List<WhiteListedRole>(viewModel.WhiteListedRoleIds
+                        .Select(r =>
+                            new WhiteListedRole
+                            {
+                                RoleId = r
+                            }));
 
-            // Save specific channel settings to the database.
-            if (viewModel.ChannelSettings.Enabled)
-            {
-                if (!isSettingsInDb)
-                {
-                    saveSettingsTasks.Add(_streamAnnouncerChannelSettingsService.Create(settings));
-                }
-                else
-                {
-                    saveSettingsTasks.Add(_streamAnnouncerChannelSettingsService.Update(settings));
-                }
+                await _streamAnnouncerSettingsService.SaveSettings(streamerSettings);
             }
             else
             {
-                if(isSettingsInDb)
-                    saveSettingsTasks.Add(_streamAnnouncerChannelSettingsService.Remove(settings));
+                // Clear all white listed roles from the database
+                var whiteListedRoles = await _whiteListedRoleEntityService.Get(w => w.GuildId == guildId);
+
+                if (whiteListedRoles != null)
+                    await _whiteListedRoleEntityService.RemoveBulk(whiteListedRoles);
+
+                if (viewModel.WhiteListedRoleIds != null)
+                    await _whiteListedRoleEntityService.CreateBulk(viewModel.WhiteListedRoleIds.Select(r =>
+                        new WhiteListedRole
+                        {
+                            RoleId = r,
+                            GuildId = guildId
+                        }));
+
+                saveSettingsTasks.Add(_streamAnnouncerSettingsService.SaveSettings(new StreamerSettings
+                {
+                    GuildId = guildId,
+                    Enabled = viewModel.Enabled,
+                    StreamerRoleEnabled = viewModel.StreamerRoleEnabled,
+                    RoleId = viewModel.RoleId
+                }));
+            }
+
+            // Value defaults to 0, if the value is 0, EF will try to auto increment the ID, throwing an error.
+            if (viewModel.ChannelId != 0)
+            {
+                // Settings for the specified channel of a guild.
+                var settings = await _streamAnnouncerChannelSettingsService.Find(viewModel.ChannelId);
+
+                // Remember if there were settings in db, as settings will be populated later if they aren't.
+                var isSettingsInDb = settings != null;
+
+                // Save general module settings to the database
+                if (!isSettingsInDb)
+                    settings = new StreamerChannelSettings
+                    {
+                        GuildId = guildId,
+                        ChannelId = viewModel.ChannelId
+                    };
+
+                settings.RemoveMessage = viewModel.ChannelSettings.RemoveMessages;
+
+                // Save specific channel settings to the database.
+                if (viewModel.ChannelSettings.Enabled)
+                    saveSettingsTasks.Add(!isSettingsInDb
+                        ? _streamAnnouncerChannelSettingsService.Create(settings)
+                        : _streamAnnouncerChannelSettingsService.Update(settings));
+                else
+                {
+                    if (isSettingsInDb)
+                        saveSettingsTasks.Add(_streamAnnouncerChannelSettingsService.Remove(settings));
+                }
             }
 
             await Task.WhenAll(saveSettingsTasks.ToArray());
@@ -156,57 +253,171 @@ namespace Volvox.Helios.Web.Controllers
 
         #endregion
 
-        #region StreamerRole
+        #region ChatTracker
 
         // GET
-        [HttpGet("StreamerRole")]
-        public async Task<IActionResult> StreamerRoleSettings(ulong guildId,
-            [FromServices] IDiscordGuildService guildService)
+        [HttpGet("ChatTracker")]
+        public async Task<IActionResult> ChatTrackerSettings(ulong guildId)
         {
-            var roles = await guildService.GetRoles(guildId);
+            var viewModel = new ChatTrackerSettingsViewModel();
 
-            var viewModel = new StreamerRoleSettingsViewModel
-            {
-                Roles = new SelectList(roles.RemoveManaged(), "Id", "Name")
-            };
+            var settings = await _chatTrackerSettingsService.GetSettingsByGuild(guildId);
 
-            var settings = await _streamerRoleSettingsService.GetSettingsByGuild(guildId);
+            if (settings == null)
+                return View(viewModel);
 
-            if (settings == null) return View(viewModel);
-
-            viewModel.RoleId = settings.RoleId;
             viewModel.Enabled = settings.Enabled;
 
             return View(viewModel);
         }
 
         // POST
-        [HttpPost("StreamerRole")]
-        public async Task<IActionResult> StreamerRoleSettings(ulong guildId, StreamerRoleSettingsViewModel viewModel, [FromServices] IBot bot, [FromServices] IDiscordGuildService guildService)
+        [HttpPost("ChatTracker")]
+        public async Task<IActionResult> ChatTrackerSettings(ulong guildId, ChatTrackerSettingsViewModel viewModel)
         {
-            var botRolePosition = bot.GetBotRoleHierarchy(guildId);
-
-            var roles = await guildService.GetRoles(guildId);
-
-            var selectedRolePosition = roles.FirstOrDefault(r => r.Id == viewModel.RoleId)?.Position;
-
-            // Discord bots cannot assign to roles that are higher then them in the hierarchy.
-            if (selectedRolePosition > botRolePosition)
+            // Save settings to the database.
+            await _chatTrackerSettingsService.SaveSettings(new ChatTrackerSettings
             {
-                ModelState.AddModelError("RolePosition", "The bots managed role must be positioned higher then the selected role");
+                GuildId = guildId,
+                Enabled = viewModel.Enabled
+            });
 
-                viewModel.Roles = new SelectList(roles.RemoveManaged(), "Id", "Name");
+            return RedirectToAction("Index");
+        }
 
-                return View(viewModel);
+        #endregion
+
+        #region Reminder
+
+        [HttpGet("Remembot")]
+        public async Task<IActionResult> RemembotSettings(ulong guildId,
+            [FromServices] IDiscordGuildService guildService)
+        {
+            var settings = await _reminderSettingsService.GetSettingsByGuild(guildId);
+            var channels = await guildService.GetChannels(guildId);
+            var textChannels = channels.Where(x => x.Type == 0).ToList();
+            if (settings is null)
+            {
+                settings = new RemembotSettings
+                {
+                    Enabled = false,
+                    GuildId = guildId
+                };
+
+                await _reminderSettingsService.SaveSettings(settings);
             }
 
-            // Save the settings to the database.
-            await _streamerRoleSettingsService.SaveSettings(new StreamerRoleSettings
+            var reminders = await _recurringReminderService.Get(x => x.GuildId == guildId);
+            settings.RecurringReminders = reminders;
+            var viewModel = ReminderSettingsViewModel.FromData(settings, channels);
+            return View(viewModel);
+        }
+
+        [HttpPost("Remembot")]
+        public async Task<IActionResult> RemembotSettings(ulong guildId, ReminderSettingsViewModel reminderSettings)
+        {
+            await _reminderSettingsService.SaveSettings(new RemembotSettings
+            {
+                Enabled = reminderSettings.Enabled,
+                GuildId = guildId
+            });
+
+            return RedirectToAction("Index");
+        }
+
+        #endregion
+
+        #region Dad
+
+        [HttpGet("Dad")]
+        public async Task<IActionResult> DadSettings(ulong guildId)
+        {
+            var settings = await _dadSettingsService.GetSettingsByGuild(guildId);
+
+            if (settings is null)
+            {
+                settings = new DadModuleSettings
+                {
+                    GuildId = guildId
+                };
+
+                await _dadSettingsService.SaveSettings(settings);
+            }
+
+            var vm = new DadModuleSettingViewModel
+            {
+                Enabled = settings.Enabled,
+                GuildId = guildId,
+                ResponseCooldownMinutes = settings.DadResponseCooldownMinutes
+            };
+
+            return View(vm);
+        }
+
+        [HttpPost("Dad")]
+        public async Task<IActionResult> DadSettings(ulong guildId, DadModuleSettingViewModel vm)
+        {
+            var currentSettings = await _dadSettingsService.GetSettingsByGuild(guildId);
+            currentSettings.Enabled = vm.Enabled;
+            currentSettings.DadResponseCooldownMinutes = vm.ResponseCooldownMinutes;
+
+            await _dadSettingsService.SaveSettings(currentSettings);
+
+            return RedirectToAction("Index");
+        }
+
+        #endregion
+
+        #region CleanChat
+
+        [HttpGet("CleanChat")]
+        public async Task<IActionResult> CleanChatSettings(ulong guildId, [FromServices] IDiscordGuildService guildService)
+        {
+            var viewModel = new CleanChatSettingsViewModel
+            {
+                Enabled = false,
+                GuildId = guildId,
+                CleanChatChannels = new List<ulong>()
+            };
+
+            var settings = await _cleanchatSettingsService.GetSettingsByGuild(guildId, x => x.Channels);
+
+            if (settings == null)
+                return View(viewModel);
+
+            viewModel.GuildId = settings.GuildId;
+            viewModel.Enabled = settings.Enabled;
+            viewModel.CleanChatChannels = settings.Channels?.Select(c => c.Id).ToList();
+            viewModel.MessageDuration = settings.MessageDuration;
+
+            return View(viewModel);
+        }
+
+        [HttpPost("CleanChat")]
+        public async Task<IActionResult> CleanChatSettings(ulong guildId, CleanChatSettingsViewModel viewModel)
+        {
+            var settings = new CleanChatSettings
             {
                 GuildId = guildId,
                 Enabled = viewModel.Enabled,
-                RoleId = viewModel.RoleId
-            });
+                MessageDuration = viewModel.MessageDuration,
+                Channels = new List<CleanChatChannel>()
+            };
+
+            await _cleanchatSettingsService.SaveSettings(settings);
+
+            var cleanChatChannels = await _cleanChatChannelEntityService.Get(c => c.GuildId == guildId);
+
+            // Remove all channels
+            if (cleanChatChannels != null || cleanChatChannels.Count > 0)
+                await _cleanChatChannelEntityService.RemoveBulk(cleanChatChannels);
+
+            await _cleanChatChannelEntityService.CreateBulk(viewModel.CleanChatChannels.Select(c =>
+                new CleanChatChannel
+                {
+                    Id = c,
+                    GuildId = guildId
+                }));
 
             return RedirectToAction("Index");
         }

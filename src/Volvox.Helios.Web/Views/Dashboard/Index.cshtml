@@ -1,0 +1,170 @@
+﻿@model Volvox.Helios.Web.ViewModels.Dashboard.DashboardIndexViewModel
+
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<partial name="./Partials/_DashboardHeader" model="@Model.UserGuilds.Select(g => g.Guild)" />
+<div class="accordion" id="serverAccordion">
+    @for (var i = 0; i < Model.UserGuilds.Count; i++)
+    {
+        var uG = Model.UserGuilds[i];
+        <div class="card mt-4">
+            <div class="card-img-top d-flex align-items-center bg-gray pt-2 pb-2" id="s-@i-@uG.Guild.Name">
+                <img class="card-img-top ml-3 dashboard-guild-image" src="@uG.Guild.ImageUrl" alt="@uG.Guild.Name">
+                <h5 class="col mb-0 card-title text-volvox">@uG.Guild.Name</h5>
+                <a href="#" onclick="toggleAccBtn(event);" class="text-volvox mr-3" data-toggle="collapse" data-target="#s-@i" aria-expanded="true" aria-controls="s-@i">
+                    <i class="fas fa-toggle-on d-block"></i>
+                </a>
+                @if (uG.Guild.Details.IsBotInGuild)
+                {
+                    <a class="text-volvox mr-3" asp-action="Details" asp-route-guildId="@uG.Guild.Id">
+                        <i class="fas fa-info-circle"></i>
+                    </a>
+                    <a class="text-volvox mr-3" asp-controller="Settings" asp-action="Index" asp-route-guildId="@uG.Guild.Id">
+                        <i class="fas fa-cog"></i>
+                    </a>
+                }
+            </div>
+            <div class="collapse show" id="s-@i" aria-labelledby="s-@i-@uG.Guild.Name">
+                <div class="card-body">
+                    <p class="card-text">
+                        <partial name="./Partials/_DashboardCard" model="@uG.Guild" />
+                    </p>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+
+        function toggleAccBtn(e) {
+            const el = $(e.target);
+            if (el.hasClass('fa-toggle-on'))
+                el.removeClass('fa-toggle-on').addClass('fa-toggle-off');
+            else
+                el.removeClass('fa-toggle-off').addClass('fa-toggle-on');
+        }
+
+        function toggleFavouriteBtn(e) {
+            const el = $(e.target).find('i');
+            if (el.hasClass('fas'))
+                el.removeClass('fas').addClass('far');
+            else
+                el.removeClass('far').addClass('fas');
+        }
+        
+        $('#lineChart').dxChart({
+            dataSource: [
+                {
+                    "arg": "Monday",
+                    "val": 3
+                },
+                {
+                    "arg": "Tuesday",
+                    "val": 2
+                },
+                {
+                    "arg": "Wednesday",
+                    "val": 3
+                },
+                {
+                    "arg": "Thursday",
+                    "val": 4
+                },
+                {
+                    "arg": "Friday",
+                    "val": 6
+                },
+                {
+                    "arg": "Saturday",
+                    "val": 11
+                },
+                {
+                    "arg": "Sunday",
+                    "val": 4
+                }
+            ],
+            series: {
+
+            }
+        });
+
+        $('#mostActiveUsers').dxPieChart({
+            dataSource: [
+                {
+                    "arg": "general",
+                    "val": 12
+                },
+                {
+                    "arg": "test",
+                    "val": 7
+                },
+                {
+                    "arg": "gaming",
+                    "val": 7
+                },
+                {
+                    "arg": "support",
+                    "val": 7
+                },
+                {
+                    "arg": "suggestions",
+                    "val": 6
+                },
+                {
+                    "arg": "memes",
+                    "val": 5
+                },
+                {
+                    "arg": "channel1",
+                    "val": 2
+                },
+                {
+                    "arg": "github",
+                    "val": 55
+                }
+            ],
+            series: {},
+            legend: {
+                horizontalAlignment: "center",
+                verticalAlignment: "bottom",
+                itemTextPosition: "center",
+                orientation: "horizontal"
+            },
+            palette: "Carmine"
+        });
+
+        $('#mostActiveChannels').dxPieChart({
+            dataSource: [
+                {
+                    "arg": "Bill",
+                    "val": 12
+                },
+                {
+                    "arg": "Sam",
+                    "val": 7
+                },
+                {
+                    "arg": "Brian",
+                    "val": 5
+                },
+                {
+                    "arg": "Smite",
+                    "val": 15
+                }
+            ],
+            palette: "Carmine",
+            series: {},
+            legend: {
+                horizontalAlignment: "center",
+                verticalAlignment: "bottom",
+                itemTextPosition: "center",
+                orientation: "horizontal"
+            }
+        });
+
+    </script>
+}

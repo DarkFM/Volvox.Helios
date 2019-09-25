@@ -1,0 +1,197 @@
+﻿@model Volvox.Helios.Web.ViewModels.Poll.ViewPollsViewModel
+@{
+    ViewData["Title"] = "View Polls";
+}
+
+<div class="row">
+    <div class="col-sm-11">
+        <h2>My Polls</h2>
+    </div>
+
+    <div class="col-sm-1">
+        <button class="btn btn-volvox-outline" id="NewPoll">New</button>
+    </div>
+</div>
+
+<hr />
+
+<div class="row">
+
+    <div class="col-12">
+        <div class="row border border-gray2 rounded sliding-border ml-0 mr-0">
+            <div class="col-md-9 col-10 pt-3 pb-3">
+                <h4 class="mb-0">Information and Instructions</h4>
+            </div>
+            <div class="col-md-3 col-2 valign">
+                <div class="btn-group material-btn-group ml-auto">
+                    <a href="#infoCollapse" class="info-btn" data-toggle="collapse" data-animation="sliding-border" role="button" aria-expanded="false" aria-controls="infoCollapse">
+                        <i class="fas fa-info-circle"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="col-12 collapse" id="infoCollapse">
+                <p>
+                    This module gives you information about the current polls and it's votes. The graph show's a more simplified view of the votes.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 mt-4">
+        <div class="form-group">
+            <div id="poll"></div>
+        </div>
+    </div>
+    <div class="col-md-12 col-lg-6">
+        <div class="col-12 border border-gray2 rounded pt-2 h-100">
+            <h5 id="Title" class="mb-4">Hey, how cool is this example?</h5>
+            <div class="form-group">
+                <label asp-for="Options" class="font-size-small"></label>
+                <ul class="list-group" id="Options">
+                    <li class="list-group-item poll-item">
+                        Not cool
+                        <div class="vote-count valign">
+                            5 Votes
+                        </div>
+                    </li>
+                    <li class="list-group-item poll-item">
+                        Its alright...:
+                        <div class="vote-count valign">
+                            44 Votes
+                        </div>
+                    </li>
+                    <li class="list-group-item poll-item">
+                        Pretty cool:
+                        <div class="vote-count valign">
+                            223 Votes
+                        </div>
+                    </li>
+                    <li class="list-group-item poll-item">
+                        Top notch:
+                        <div class="vote-count valign">
+                            304 Votes
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-12 col-lg-6 mt-lg-0 mt-4">
+        <div class="col-12 border border-gray2 rounded pt-2 h-100">
+            <div id="pieChart"></div>
+        </div>
+    </div>
+</div>
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+
+    <script>
+        // Populate selected polls data
+        function updatePoll(e) {
+            var Ids = e.value.split('-')
+            var messageId = Ids[0];
+            var channelId = Ids[1];
+            $.when(GetPollDetails(channelId, messageId)).done(function (response) {
+                $("#Title").text(RemoveLeadingEmoticon(response.Title));
+                $("#Options").empty();
+
+                $.each(response.Options, function (i, option) {
+                    // Remove 1 from option count as the bot will add one vote to all options, to display them as buttons.
+                    $("#Options").append(
+                        $('<li class="list-group-item poll-item"></li>').html(RemoveLeadingEmoticon(option.Option) + "<div class=\"vote-count valign\">" + parseInt(option.VoteCount - 1) + "</div>")
+                    );
+                })
+            });
+        }
+
+        function GetPollDetails(channelId, messageId) {
+            const url = `/api/GetPollData?channelId=${channelId}&messageId=${messageId}`;
+            return $.ajax({
+                type: 'GET',
+                cache: false,
+                url: url
+            }).done(function (response) {
+                return response;
+            });
+        }
+
+        function RemoveLeadingEmoticon(text) {
+            if (!text) return "";
+            return text.trim().substr(text.indexOf(" ") + 1)
+        }
+
+        // Direct user to new poll form
+        $("#NewPoll").on('click', function () {
+            window.location = `${window.location.href}/newpoll`
+        });
+    </script>
+    <script>
+        $(function () {
+            var src = @(Html.Raw(Json.Serialize(Model.Polls)));
+            
+            $("#poll").dxSelectBox({
+                dataSource: src,
+                valueExpr: "value",
+                displayExpr: "text",
+                searchEnabled: true,
+                onValueChanged: (e) => {
+                    var Ids = e.value.split('-')
+                    var messageId = Ids[0];
+                    var channelId = Ids[1];
+                    $.when(GetPollDetails(channelId, messageId)).done(function (response) {
+                        $("#Title").text(RemoveLeadingEmoticon(response.title));
+                        $("#Options").empty();
+                        
+                        $.each(response.options, function (i, option) {
+                            // Remove 1 from option count as the bot will add one vote to all options, to display them as buttons.
+                            $("#Options").append(
+                                $('<li class="list-group-item poll-item"></li>').html(RemoveLeadingEmoticon(option.option) + "<div class=\"vote-count valign\">" + parseInt(option.voteCount - 1) + "</div>")
+                            );
+                        });
+                        
+                        $('#pieChart').dxPieChart({
+                            dataSource: response.options,
+                            commonSeriesSettings: {
+                                argumentField: "option"
+                            },
+                            series: [
+                                { valueField: "option" },
+                                { valueField: "voteCount" }
+                            ],
+                            legend: {
+                                horizontalAlignment: "center",
+                                verticalAlignment: "bottom",
+                                itemTextPosition: "left",
+                                orientation: "horizontal",
+                                customizeText: (e) => {
+                                    return RemoveLeadingEmoticon(e.pointName);
+                                }
+                            }
+                        });
+                    });
+                }
+            });
+            $('#pieChart').dxPieChart({
+                dataSource: [
+                    { option: "Not cool", voteCount: 5 },
+                    { option: "Its alright", voteCount: 44 },
+                    { option: "Pretty cool", voteCount: 223 },
+                    { option: "Top notch", voteCount: 304 }
+                ],
+                commonSeriesSettings: {
+                    argumentField: "option"
+                },
+                series: [
+                    { valueField: "option" },
+                    { valueField: "voteCount" }
+                ],
+                legend: {
+                    horizontalAlignment: "center",
+                    verticalAlignment: "bottom",
+                    itemTextPosition: "left",
+                    orientation: "horizontal"
+                }
+            });
+        });
+    </script>
+}

@@ -1,0 +1,24 @@
+@model Volvox.Helios.Domain.Discord.Guild
+
+@if (!Model.Details.IsBotInGuild)
+{
+    <a asp-controller="Settings" asp-action="Index" asp-route-guildId="@Model.Id" class="text-light">
+        <i class="fas fa-plus add-badge"></i> <span class="add-label">Add Bot to Server</span>
+    </a>
+}
+
+else
+{
+
+    <div class="w-100 d-flex">
+        <div>
+            <span class="material-badge mr-2"><strong>@Model.Details.MemberCount</strong> Members</span>
+            <span class="material-badge mr-2"><strong>@Model.Details.Roles.Count</strong> Roles</span>
+            <span class="material-badge mr-2 mr-md-0"><strong>@Model.Details.Channels.Count</strong> Channels</span>
+        </div>
+
+        <div class="ml-auto">
+            <span class="material-badge">Online</span>
+        </div>
+    </div>
+}

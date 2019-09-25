@@ -1,5 +1,3 @@
-using System;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
@@ -23,9 +21,11 @@ namespace Volvox.Helios.Core.Modules.Common
         ILogger<IModule> Logger { get; }
 
         /// <summary>
-        ///     To execute or not to execute the module. (Default: true)
+        ///     Returns true if the module is enabled for the specified guild and false if not.
         /// </summary>
-        bool IsEnabled { get; set; }
+        /// <param name="guildId">Id if the guild to check.</param>
+        /// <returns>True if the module is enabled for the specified guild and false if not.</returns>
+        Task<bool> IsEnabledForGuild(ulong guildId);
 
         /// <summary>
         ///     Initialize the module.

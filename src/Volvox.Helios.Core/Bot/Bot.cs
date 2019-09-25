@@ -18,22 +18,20 @@ namespace Volvox.Helios.Core.Bot
     /// </summary>
     public class Bot : IBot
     {
+        private const long VolvoxGuildId = 468467000344313866;
+        private const long VolvoxGuildLogsChannelId = 507373438051287050;
+
         /// <summary>
         ///     Discord bot.
         /// </summary>
         /// <param name="modules">List of modules for the bot.</param>
         /// <param name="settings">Settings used to connect to Discord.</param>
         /// <param name="logger">Application logger.</param>
-        public Bot(IList<IModule> modules, IDiscordSettings settings, ILogger<Bot> logger)
+        public Bot(IList<IModule> modules, IDiscordSettings settings, ILogger<Bot> logger, DiscordSocketClient client)
         {
             Modules = modules;
             Logger = logger;
-
-            // TODO: Convert logging to module
-            Client = new DiscordSocketClient(new DiscordSocketConfig
-            {
-                LogLevel = LogSeverity.Verbose
-            });
+            Client = client;
 
             Client.Log += Log;
 
@@ -52,7 +50,11 @@ namespace Volvox.Helios.Core.Bot
                 {
                     for (;;)
                     {
-                        await Client.SetGameAsync($"volvox.tech | with {Client.Guilds.Count} servers");
+                        var memberCount = Client.Guilds.Sum(guild => guild.MemberCount);
+                        var version = System.Reflection.Assembly.GetEntryAssembly().GetName().Version;
+
+                        await Client.SetGameAsync(
+                            $"volvox.tech | {Client.Guilds.Count} servers | {memberCount} members | v{version.Major}.{version.Minor}.{version.Build}");
                         await Task.Delay(TimeSpan.FromMinutes(15));
                     }
                 });
@@ -60,10 +62,59 @@ namespace Volvox.Helios.Core.Bot
                 return Task.CompletedTask;
             };
 
+            // Announce to Volvox when the bot joins a guild.
+            Client.JoinedGuild += async guild =>
+            {
+                var channel = Client.GetGuild(VolvoxGuildId)?.GetTextChannel(VolvoxGuildLogsChannelId);
+
+                if (channel != null)
+                {
+                    var builder = new EmbedBuilder();
+
+                    builder.Title = "New Guild";
+                    builder.Color = EmbedColors.GuildJoinColor;
+
+                    await channel.SendMessageAsync("", false, CreateEmbed(builder, guild));
+                }
+            };
+
+            // Announce to Volvox when the bot leaves a guild.
+            Client.LeftGuild += async guild =>
+            {
+                var channel = Client.GetGuild(VolvoxGuildId)?.GetTextChannel(VolvoxGuildLogsChannelId);
+
+                if (channel != null)
+                {
+                    var builder = new EmbedBuilder();
+
+                    builder.Title = "Left Guild";
+                    builder.Color = EmbedColors.ErrorColor;
+                   
+                    await channel.SendMessageAsync("", false, CreateEmbed(builder, guild));
+                }
+            };
+
             // Add reliability service.
             _ = new ReliabilityService(Client, logger);
 
             Connector = new BotConnector(settings, Client);
+        }
+
+        /// <summary>
+        /// Create and build an embed for guild joins/leaves
+        /// </summary>
+        /// <param name="builder">The EmbedBuilder to be built</param>
+        /// <param name="guild">The guild that the bot has joined/left</param>
+        /// <returns>The built Embed object</returns>
+        private Embed CreateEmbed(EmbedBuilder builder, SocketGuild guild)
+        {
+            builder.AddField("Name", guild.Name, false);
+            builder.AddField("Owner", $"{guild.Owner.Username} ({guild.OwnerId})", true);
+            builder.AddField("User Count", guild.Users.Count(u => !u.IsBot), false);
+            builder.AddField("Bot Count", guild.Users.Count(u => u.IsBot), true);
+            builder.ThumbnailUrl = guild.IconUrl;
+
+            return builder.Build();
         }
 
         /// <inheritdoc />
@@ -111,6 +162,15 @@ namespace Volvox.Helios.Core.Bot
         public IReadOnlyCollection<SocketGuild> GetGuilds()
         {
             return Client.Guilds;
+        }
+
+        /// <summary>
+        ///     Get the specified guild.
+        /// </summary>
+        /// <returns>SocketGuild object.</returns>
+        public SocketGuild GetGuild(ulong guildId)
+        {
+            return GetGuilds().FirstOrDefault(g => g.Id == guildId);
         }
 
         /// <inheritdoc />

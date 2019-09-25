@@ -1,13 +1,36 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netcoreapp2.1</TargetFramework>
+    <Version>1.0.0</Version>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Migrations\20180923013907_RecurringReminderMessageAddReadableCron.cs" />
+    <Compile Remove="Migrations\20180923172052_RecurringMessageIdentityColumn.cs" />
+    <Compile Remove="Migrations\20180923173115_RecurringReminderIdentityColumn.cs" />
+    <Compile Remove="Migrations\20180923182931_RecurringReminderGuidPk.cs" />
+    <Compile Remove="Migrations\20180923183809_RecurringReminderValueConverter.cs" />
+    <Compile Remove="Migrations\20180923184536_Test.cs" />
+    <Compile Remove="Migrations\20180923185622_ReminderModuleData.cs" />
+    <Compile Remove="Migrations\20180923191328_ReminderModuleData.cs" />
+    <Compile Remove="Migrations\20180923191432_ReminderModuleData.cs" />
+    <Compile Remove="Migrations\20181002022633_ReminderChangeToLongId.cs" />
+    <Compile Remove="Migrations\20181002022742_ReminderChangeToLongId.cs" />
+    <Compile Remove="Migrations\20181002022927_ReminderModule.cs" />
+    <Compile Remove="Migrations\20190109043433_DadBotKey.cs" />
+    <Compile Remove="Migrations\20190110040527_DadModuleCooldown.cs" />
+    <Compile Remove="Migrations\20190110040640_DadModuleCooldown.cs" />
+    <Compile Remove="Migrations\20190110040829_DadModuleCooldown.cs" />
+    <Compile Remove="Migrations\20190110041022_DadModuleCooldown.cs" />
+    <Compile Remove="Migrations\20190225185906_CleanChatSettingsGuildIdProperty.cs" />
+    <Compile Remove="Migrations\20190225190320_CleanChatSettingsModule.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="FluentCache" Version="4.0.0.2" />
-    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="2.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="2.1" />
-    <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
+    <PackageReference Include="Hangfire" Version="1.6.21" />
+    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.2.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="2.2.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="2.2.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Volvox.Helios.Domain\Volvox.Helios.Domain.csproj" />
